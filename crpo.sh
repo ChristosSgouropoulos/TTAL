@@ -1,0 +1,2 @@
+python3 tangoflux/generate_crpo.py --json_path='path_to_prompt_bank.json'  --sample_size=50 --model='path_to_tangoflux.safetensors' --num_samples=5 --output_dir='outputs'
+python3 tangoflux/label_crpo.py --json_path='outputs/results.json' --output_dir='outputs/crpo_iteration1' --num_samples=5
