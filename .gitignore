@@ -176,3 +176,4 @@ cython_debug/
 wandb
 outputs
 configs
+BEATs_iter3_plus_AS2M.pt
