@@ -423,7 +423,7 @@ def main():
 
             with accelerator.accumulate(model):
                 optimizer.zero_grad()
-                device = model.device
+                device = next(model.parameters()).device
                 text, audios, duration, _ = batch
 
                 with torch.no_grad():

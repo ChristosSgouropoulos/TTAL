@@ -9,7 +9,7 @@ paths:
 
 # Training-related parameters
 training:
-  per_device_batch_size: 4
+  per_device_batch_size: 2
   learning_rate: 5e-4
   gradient_accumulation_steps: 1
   num_train_epochs: 80
