@@ -3,7 +3,7 @@
 paths:
   train_file: "data/train.json"
   val_file: "data/val.json"
-  test_file: "data/val.json"
+  test_file: "data/test.json"
   resume_from_checkpoint: ""
   output_dir: "outputs/"
 
