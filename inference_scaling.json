@@ -1,0 +1,38 @@
+{
+    "_comment": "Inference-Time Scaling Config for TangoFlux. Change values to run different experiments.",
+    "model_name": "declare-lab/TangoFlux",
+    "test_set_path": "/mnt/storage/audiocaps/test_audiocaps.json",
+    "output_dir": "/mnt/storage/outputs/inference_scaling_zero_order_ode_linear_6_candidates_5_search_radius_80_BEATS_YES_randomize_pivot_new_prior",
+    "device": "cuda:1",
+    "reward_device": "cuda:1",
+    "seed": 42,
+    "duration": 10,
+    "guidance_scale": 4.5,
+    "num_inference_steps": 50,
+    "sample_rate": 44100,
+    "scaling_method": "zero_order",
+    "sample_method": "ode",
+    "interpolant": "linear",
+    "n_particles": 6,
+    "search_steps": 5,
+    "search_radius": 0.8,
+    "randomize_pivot": true,
+    "max_nfe": 1200,
+    "temperature": 1.0,
+    "eval_interval": 5,
+    "guidance_strength": 1.0,
+    "diffusion_norm": 0.5,
+    "init_n_particles": 2,
+    "verifier_list": [
+        "beats"
+    ],
+    "reward_weights": {
+        "clap": 0.0,
+        "aes": 0.0,
+        "beats": 1.0,
+        "qwen": 0.0
+    },
+    "max_samples": -1,
+    "save_all_scores": false,
+    "log_interval": 1
+}

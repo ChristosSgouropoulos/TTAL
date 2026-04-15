@@ -8,7 +8,7 @@ from tqdm import tqdm
 def generate_all_aggregations(
     input_json_path, 
     base_output_dir, 
-    steps=50, 
+    steps=300, 
     duration=10, 
     device_id="0"
 ):
@@ -76,9 +76,9 @@ def generate_all_aggregations(
 # --- Execute ---
 if __name__ == "__main__":
     generate_all_aggregations(
-        input_json_path='/data/audiocaps/test_audiocaps.json',
-        base_output_dir='/data/audiocaps/test_generated',
-        steps=50,
+        input_json_path='data/test_audiocaps_subset.json',
+        base_output_dir='/data/audiocaps/test_generated_300_steps',
+        steps=600,
         duration=10,
         device_id="0"
     )

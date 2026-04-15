@@ -116,8 +116,10 @@ class DPOText2AudioDataset(Dataset):
 
 class Text2AudioDataset(Dataset):
     def __init__(
-        self, dataset, prefix, text_column, audio_column, duration, num_examples=-1
+        self, dataset, prefix, text_column, audio_column, duration, num_examples=-1,
+        max_duration=None,
     ):
+        self.max_duration = max_duration
 
         inputs = list(dataset[text_column])
         self.inputs = [prefix + inp for inp in inputs]
@@ -146,14 +148,26 @@ class Text2AudioDataset(Dataset):
         return len(self.inputs)
 
     def __getitem__(self, index):
-        s1, s2, s3, s4 = (
-            self.inputs[index],
-            self.audios[index],
-            self.durations[index],
-            self.indices[index],
-        )
-        return s1, s2, s3, s4
+        text = self.inputs[index]
+        audio_path = self.audios[index]
+        duration = self.durations[index]
+        idx = self.indices[index]
+
+        if self.max_duration is not None:
+            wav = read_wav_file(audio_path, self.max_duration)
+            if wav.shape[0] == 1:  # mono -> fake stereo
+                wav = wav.repeat(2, 1)
+            return text, wav, duration, idx
+
+        return text, audio_path, duration, idx
 
     def collate_fn(self, data):
+        if self.max_duration is not None:
+            texts = [d[0] for d in data]
+            audios = torch.stack([d[1] for d in data])
+            durations = [d[2] for d in data]
+            indices = [d[3] for d in data]
+            return texts, audios, durations, indices
+
         dat = pd.DataFrame(data)
         return [dat[i].tolist() for i in dat]

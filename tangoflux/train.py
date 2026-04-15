@@ -261,6 +261,7 @@ def main():
         model.text_encoder.eval()
 
     prefix = args.prefix
+    length = config["training"]["max_audio_duration"]
 
     with accelerator.main_process_first():
         train_dataset = Text2AudioDataset(
@@ -270,6 +271,7 @@ def main():
             audio_column,
             "duration",
             args.num_examples,
+            max_duration=length,
         )
         eval_dataset = Text2AudioDataset(
             raw_datasets["validation"],
@@ -278,6 +280,7 @@ def main():
             audio_column,
             "duration",
             args.num_examples,
+            max_duration=length,
         )
         test_dataset = Text2AudioDataset(
             raw_datasets["test"],
@@ -286,6 +289,7 @@ def main():
             audio_column,
             "duration",
             args.num_examples,
+            max_duration=length,
         )
 
         accelerator.print(
@@ -296,23 +300,34 @@ def main():
             )
         )
 
+    num_dataloader_workers = 8
+
     train_dataloader = DataLoader(
         train_dataset,
         shuffle=True,
         batch_size=config["training"]["per_device_batch_size"],
         collate_fn=train_dataset.collate_fn,
+        num_workers=num_dataloader_workers,
+        prefetch_factor=2,
+        persistent_workers=True,
     )
     eval_dataloader = DataLoader(
         eval_dataset,
         shuffle=True,
         batch_size=config["training"]["per_device_batch_size"],
         collate_fn=eval_dataset.collate_fn,
+        num_workers=num_dataloader_workers,
+        prefetch_factor=2,
+        persistent_workers=True,
     )
     test_dataloader = DataLoader(
         test_dataset,
         shuffle=False,
         batch_size=config["training"]["per_device_batch_size"],
         collate_fn=test_dataset.collate_fn,
+        num_workers=num_dataloader_workers,
+        prefetch_factor=2,
+        persistent_workers=True,
     )
 
     # Optimizer
@@ -414,7 +429,6 @@ def main():
 
     # Duration of the audio clips in seconds
     best_loss = np.inf
-    length = config["training"]["max_audio_duration"]
 
     for epoch in range(starting_epoch, num_train_epochs):
         model.train()
@@ -424,23 +438,9 @@ def main():
             with accelerator.accumulate(model):
                 optimizer.zero_grad()
                 device = next(model.parameters()).device
-                text, audios, duration, _ = batch
+                text, audio_input, duration, _ = batch
 
                 with torch.no_grad():
-                    audio_list = []
-
-                    for audio_path in audios:
-
-                        wav = read_wav_file(
-                            audio_path, length
-                        )  ## Only read the first 30 seconds of audio
-                        if (
-                            wav.shape[0] == 1
-                        ):  ## If this audio is mono, we repeat the channel so it become "fake stereo"
-                            wav = wav.repeat(2, 1)
-                        audio_list.append(wav)
-
-                    audio_input = torch.stack(audio_list, dim=0)
                     audio_input = audio_input.to(device)
                     unwrapped_vae = accelerator.unwrap_model(vae)
 
@@ -507,23 +507,9 @@ def main():
             range(len(eval_dataloader)), disable=not accelerator.is_local_main_process
         )
         for step, batch in enumerate(eval_dataloader):
-            with accelerator.accumulate(model) and torch.no_grad():
+            with accelerator.accumulate(model), torch.no_grad():
                 device = model.device
-                text, audios, duration, _ = batch
-
-                audio_list = []
-                for audio_path in audios:
-
-                    wav = read_wav_file(
-                        audio_path, length
-                    )  ## make sure none of audio exceed 30 sec
-                    if (
-                        wav.shape[0] == 1
-                    ):  ## If this audio is mono, we repeat the channel so it become "fake stereo"
-                        wav = wav.repeat(2, 1)
-                    audio_list.append(wav)
-
-                audio_input = torch.stack(audio_list, dim=0)
+                text, audio_input, duration, _ = batch
                 audio_input = audio_input.to(device)
                 duration = torch.tensor(duration, device=device)
                 unwrapped_vae = accelerator.unwrap_model(vae)
