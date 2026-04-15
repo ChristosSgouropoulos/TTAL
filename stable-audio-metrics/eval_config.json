@@ -1,0 +1,14 @@
+{
+    "_comment": "Evaluation Config for stable-audio-metrics. Change paths to evaluate different experiment outputs.",
+    "raw_generated_path": "/mnt/storage/outputs/inference_scaling_zero_order_ode_linear_6_candidates_3_search_radius_75_CLAP_no_randomize_pivot_new_prior_RERUN/audio",
+    "reference_path": "/mnt/storage/audiocaps/reference_886_mono",
+    "json_path": "/mnt/storage/audiocaps/test_audiocaps.json",
+    "fixed_generated_path": "test_generated_mean_10s",
+    "target_sr": 44100,
+    "target_duration_sec": 10,
+    "metrics": [
+        "clap",
+        "kld",
+        "fd"
+    ]
+}
