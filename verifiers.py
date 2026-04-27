@@ -61,8 +61,15 @@ class CLAPRewardModel:
     """CLAP-based reward: measures text-audio alignment via cosine similarity."""
 
     def __init__(self, device="cuda"):
-        self.clap = ClapModel.from_pretrained("laion/larger_clap_general").to(device).eval()
-        self.processor = ClapProcessor.from_pretrained("laion/larger_clap_general")
+        # Pin revision that ships model.safetensors — `main` only has pytorch_model.bin,
+        # which transformers refuses to load under torch<2.6 (CVE-2025-32434).
+        _clap_rev = "16c8cc3159a3c8a31e8ff5ef1f66b0d9ab3667db"
+        self.clap = ClapModel.from_pretrained(
+            "laion/larger_clap_general", revision=_clap_rev, use_safetensors=True
+        ).to(device).eval()
+        self.processor = ClapProcessor.from_pretrained(
+            "laion/larger_clap_general", revision=_clap_rev
+        )
         self.device = device
         self._cached_text_features = None
         self._cached_prompt = None

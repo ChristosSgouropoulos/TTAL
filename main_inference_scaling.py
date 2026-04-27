@@ -206,17 +206,22 @@ def run(cfg):
 
     # --- Inference loop ---
     print(f"\n[4/4] Running inference with '{scaling_method}' method...")
-    results = []
     duration = cfg.get("duration", 10)
     sample_rate = cfg.get("sample_rate", 44100)
     log_interval = cfg.get("log_interval", 10)
 
     audio_output_dir = os.path.join(output_dir, "audio")
     os.makedirs(audio_output_dir, exist_ok=True)
+    results_path = os.path.join(output_dir, "results.json")
+    results = json.load(open(results_path)) if os.path.exists(results_path) else []
+    done_filenames = {r["filename"] for r in results}
+
 
     for i, item in enumerate(tqdm(dataset, desc="Generating")):
         prompt = item.get("captions")
         original_name = os.path.basename(item.get("location", f"sample_{i:05d}.wav"))
+        if original_name in done_filenames:
+            continue
 
         # Create a fresh prior for each prompt
         prior = TangoFluxPrior(
@@ -264,6 +269,13 @@ def run(cfg):
             method_kwargs["search_steps"] = cfg.get("search_steps", 5)
             method_kwargs["search_radius"] = cfg.get("search_radius", 5.0)
             method_kwargs["randomize_pivot"] = cfg.get("randomize_pivot", True)
+
+        elif scaling_method == "pso":
+            method_kwargs["n_particles"] = cfg.get("n_particles", 4)
+            method_kwargs["search_steps"] = cfg.get("search_steps", 5)
+            method_kwargs["inertia"] = cfg.get("inertia", 0.7)
+            method_kwargs["cognitive"] = cfg.get("cognitive", 1.5)
+            method_kwargs["social"] = cfg.get("social", 1.5)
 
         # Run scaling method
         try:
@@ -315,15 +327,11 @@ def run(cfg):
                 "error": str(e),
             })
         finally:
-            # Free GPU memory between samples
+            with open(results_path, "w") as f:
+                json.dump(results, f, indent=2)
             del prior
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-
-    # --- Save results ---
-    results_path = os.path.join(output_dir, "results.json")
-    with open(results_path, "w") as f:
-        json.dump(results, f, indent=2)
 
     # --- Summary statistics ---
     successful = [r for r in results if "error" not in r]

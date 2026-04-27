@@ -622,6 +622,137 @@ def inference_zero_order(
 
 
 # ============================================================================
+# 6. Particle Swarm Optimization (PSO)
+# ============================================================================
+
+def inference_pso(
+    prior,
+    reward_model,
+    prompt,
+    n_particles=4,
+    search_steps=5,
+    inertia=0.7,
+    cognitive=1.5,
+    social=1.5,
+    duration=10,
+    sample_rate=44100,
+    seed=42,
+):
+    """Particle Swarm Optimization over the initial-noise latent space.
+
+    Each particle is a candidate noise latent x_i in R^d (d = seq_len * 64).
+    Every iteration we run a full ODE denoise + decode + reward for each
+    particle, then update each particle with the standard PSO velocity rule:
+
+        v_i ← w * v_i + c1 * r1 * (p_i - x_i) + c2 * r2 * (g - x_i)
+        x_i ← x_i + v_i
+        x_i ← x_i * sqrt(d) / ||x_i||      # project back to noise sphere
+
+    where p_i is the particle's personal best, g is the swarm's global best,
+    r1, r2 ~ U(0, 1) drawn elementwise. The final projection keeps each
+    particle on the typical sphere of a standard d-dim Gaussian, so the
+    diffusion model still sees in-distribution noise.
+
+    Args:
+        n_particles:   swarm size (NFE per iter = n_particles * num_steps).
+        search_steps:  number of PSO iterations.
+        inertia:       w in [0, 1]. Higher = more momentum, more exploration.
+        cognitive:     c1. Pull toward each particle's own best.
+        social:        c2. Pull toward the swarm's global best.
+    """
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    # 1. Initialize swarm: N random Gaussian latents, zero velocity.
+    particles = torch.cat(
+        [prior.init_latent(1) for _ in range(n_particles)], dim=0
+    )  # (N, seq, 64)
+    velocities = torch.zeros_like(particles)
+
+    # Per-particle best position/score; swarm-global best position/score.
+    pbest_pos = particles.clone()
+    pbest_score = torch.full(
+        (n_particles,), float("-inf"), device=particles.device
+    )
+    gbest_score = float("-inf")
+    gbest_waveform = None
+    gbest_pos = particles[0:1].clone()
+
+    # Norm to project particles back onto: typical norm of N(0, I_d).
+    d = particles[0].numel()
+    target_norm = math.sqrt(d)
+
+    num_steps = len(prior.timesteps)
+    history = {"steps": [], "rewards": []}
+    progress = tqdm(range(search_steps), desc="PSO Search", leave=False)
+
+    for search_step in progress:
+        # 2. Run ODE denoise on every particle.
+        latents = particles.clone()
+        for step_idx in range(num_steps):
+            t_val = prior.timesteps[step_idx].item()
+            sigma_t = prior.get_sigma(step_idx)
+            sigma_prev = (
+                prior.get_sigma(step_idx + 1)
+                if step_idx + 1 < len(prior.sigmas)
+                else 0.0
+            )
+            velocity = prior.compute_velocity_transformed(latents, t_val)
+            latents = prior.step(latents, velocity, sigma_t, sigma_prev)
+
+        # 3. Decode + score each particle.
+        rewards_list = []
+        with torch.no_grad():
+            for i in range(n_particles):
+                waveform = prior.decode_and_trim(
+                    latents[i : i + 1], duration, sample_rate
+                )
+                reward = reward_model(waveform, prompt).item()
+                rewards_list.append(reward)
+
+                # Update personal best.
+                if reward > pbest_score[i].item():
+                    pbest_score[i] = reward
+                    pbest_pos[i] = particles[i].clone()
+
+                # Update global best (and keep the audio for return).
+                if reward > gbest_score:
+                    gbest_score = reward
+                    gbest_pos = particles[i : i + 1].clone()
+                    gbest_waveform = waveform.cpu()
+
+                del waveform
+                torch.cuda.empty_cache()
+
+        # 4. PSO velocity + position update.
+        r1 = torch.rand_like(particles)
+        r2 = torch.rand_like(particles)
+        velocities = (
+            inertia * velocities
+            + cognitive * r1 * (pbest_pos - particles)
+            + social * r2 * (gbest_pos - particles)
+        )
+        particles = particles + velocities
+
+        # 5. Project each particle back to the noise sphere of radius sqrt(d).
+        flat = particles.view(n_particles, -1)
+        flat = flat * (target_norm / flat.norm(dim=-1, keepdim=True).clamp_min(1e-12))
+        particles = flat.view_as(pbest_pos)
+
+        step_best_score = max(rewards_list)
+        history["steps"].append(search_step)
+        history["rewards"].append(step_best_score)
+
+        progress.set_postfix(
+            step_best_r=f"{step_best_score:.3f}",
+            best_r=f"{gbest_score:.3f}",
+        )
+
+    return gbest_waveform, gbest_score, history
+
+
+# ============================================================================
 # Dispatch map
 # ============================================================================
 
@@ -631,4 +762,5 @@ SCALING_METHODS = {
     "rbf": inference_rbf,
     "dps": inference_dps,
     "zero_order": inference_zero_order,
+    "pso": inference_pso,
 }

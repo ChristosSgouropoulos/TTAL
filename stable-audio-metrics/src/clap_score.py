@@ -43,25 +43,27 @@ def clap_score(id2text, audio_path, audio_files_extension='.wav', clap_model='63
     Returns:
     -- CLAP-LION score
     """
+    # cache dir for CLAP weights — override with CLAP_CACHE_DIR (compute nodes have no internet,
+    # and home has limited space, so point this at scratch).
+    cache_dir = os.environ.get('CLAP_CACHE_DIR', 'load/clap_score')
+
     # load model
     if clap_model == 'music_speech_audioset_epoch_15_esc_89.98.pt':
         url = 'https://huggingface.co/lukewys/laion_clap/resolve/main/music_speech_audioset_epoch_15_esc_89.98.pt'
-        clap_path = 'load/clap_score/music_speech_audioset_epoch_15_esc_89.98.pt'
         model = laion_clap.CLAP_Module(enable_fusion=False, amodel='HTSAT-base',  device='cuda')
     elif clap_model == 'music_audioset_epoch_15_esc_90.14.pt':
         url = 'https://huggingface.co/lukewys/laion_clap/resolve/main/music_audioset_epoch_15_esc_90.14.pt'
-        clap_path = 'load/clap_score/music_audioset_epoch_15_esc_90.14.pt'
         model = laion_clap.CLAP_Module(enable_fusion=False, amodel='HTSAT-base',  device='cuda')
     elif clap_model == 'music_speech_epoch_15_esc_89.25.pt':
         url = 'https://huggingface.co/lukewys/laion_clap/resolve/main/music_speech_epoch_15_esc_89.25.pt'
-        clap_path = 'load/clap_score/music_speech_epoch_15_esc_89.25.pt'
         model = laion_clap.CLAP_Module(enable_fusion=False, amodel='HTSAT-base',  device='cuda')
     elif clap_model == '630k-audioset-fusion-best.pt':
         url = 'https://huggingface.co/lukewys/laion_clap/resolve/main/630k-audioset-fusion-best.pt'
-        clap_path = 'load/clap_score/630k-audioset-fusion-best.pt'
         model = laion_clap.CLAP_Module(enable_fusion=True, device='cuda')
     else:
         raise ValueError('clap_model not implemented')
+
+    clap_path = os.path.join(cache_dir, clap_model)
 
     # download clap_model if not already downloaded
     if not os.path.exists(clap_path):

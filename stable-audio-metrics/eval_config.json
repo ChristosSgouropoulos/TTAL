@@ -1,9 +1,9 @@
 {
-    "_comment": "Evaluation Config for stable-audio-metrics. Change paths to evaluate different experiment outputs.",
-    "raw_generated_path": "/mnt/storage/outputs/inference_scaling_zero_order_ode_linear_6_candidates_3_search_radius_75_CLAP_no_randomize_pivot_new_prior_RERUN/audio",
-    "reference_path": "/mnt/storage/audiocaps/reference_886_mono",
-    "json_path": "/mnt/storage/audiocaps/test_audiocaps.json",
-    "fixed_generated_path": "test_generated_mean_10s",
+    "_comment": "Evaluation Config for stable-audio-metrics on Cineca Leonardo. Override raw_generated_path/fixed_generated_path via CLI to evaluate different runs.",
+    "raw_generated_path": "/leonardo_scratch/fast/EUHPC_D34_102/csgourop/inference_scaling_experiments/inference_scaling_pso_ode_linear_8_particles_5_steps_w07_c1_15_c2_15_CLAP/audio",
+    "reference_path": "/leonardo_scratch/fast/EUHPC_D34_102/csgourop/reference_886",
+    "json_path": "/leonardo_scratch/fast/EUHPC_D34_102/csgourop/test_audiocaps.json",
+    "fixed_generated_path": "/leonardo_scratch/fast/EUHPC_D34_102/csgourop/eval_tmp/test_generated_mean_10s",
     "target_sr": 44100,
     "target_duration_sec": 10,
     "metrics": [
