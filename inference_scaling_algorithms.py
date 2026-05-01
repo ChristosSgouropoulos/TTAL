@@ -107,12 +107,16 @@ def inference_particle_filtering(
     sample_rate=44100,
     temperature=1.0,
     eval_interval=5,
+    warmup_steps=0,
     seed=42,
 ):
     """Step-wise particle filtering with reward-guided resampling.
 
-    At every `eval_interval` steps, decode x̂_0 estimates, evaluate rewards,
-    and resample particles proportional to softmax(rewards / temperature).
+    Runs `warmup_steps` plain denoising steps first (no scoring/resampling), then
+    every `eval_interval` steps, decodes x̂_0 estimates, evaluates rewards, and
+    resamples particles proportional to softmax(rewards / temperature). The
+    warmup gives the Tweedie estimate enough signal to be informative — at very
+    high noise levels x̂_0 is essentially random and the reward carries no signal.
 
     Requires SDE mode (prior.sample_method="sde") for diversity after resampling.
 
@@ -124,7 +128,8 @@ def inference_particle_filtering(
         duration:       float, seconds
         sample_rate:    int
         temperature:    float, softmax temperature for resampling
-        eval_interval:  int, evaluate rewards every K steps
+        eval_interval:  int, evaluate rewards every K steps after warmup
+        warmup_steps:   int, denoising steps before search begins (no eval/resample)
         seed:           int
 
     Returns:
@@ -150,15 +155,28 @@ def inference_particle_filtering(
         # Predict velocity for all particles
         velocity = prior.compute_velocity_transformed(latents, t_val)  # (N, seq, 64)
 
-        # Reward evaluation + resampling at intervals (not the last step)
-        if (step_idx % eval_interval == 0) and step_idx < num_steps - 1:
+        # Reward evaluation + resampling: only after warmup, at eval cadence,
+        # and never on the last step (final scoring happens after the loop).
+        is_eval_step = (
+            step_idx >= warmup_steps
+            and ((step_idx - warmup_steps) % eval_interval == 0)
+            and step_idx < num_steps - 1
+        )
+        if is_eval_step:
             # Estimate x̂_0 for each particle
             x0_hat = prior.get_tweedie(latents, velocity, sigma_t)
 
-            # Decode and score
+            # Decode and score ONE AT A TIME to avoid VAE OOM
+            # (batched VAE decode allocates several GB of activations per particle)
+            rewards_list = []
             with torch.no_grad():
-                waveforms = prior.decode_and_trim(x0_hat, duration, sample_rate)
-                rewards = reward_model(waveforms, prompt)  # (N,)
+                for i in range(n_particles):
+                    wf = prior.decode_and_trim(x0_hat[i : i + 1], duration, sample_rate)
+                    rewards_list.append(reward_model(wf, prompt).item())
+                    del wf
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+            rewards = torch.tensor(rewards_list)
 
             # Resample particles proportional to rewards
             weights = torch.softmax(rewards / temperature, dim=0)
@@ -174,12 +192,21 @@ def inference_particle_filtering(
         # Take denoising step
         latents = prior.step(latents, velocity, sigma_t, sigma_prev)
 
-    # Final selection
-    waveforms = prior.decode_and_trim(latents, duration, sample_rate)
-    final_scores = reward_model(waveforms, prompt)
+    # Final selection — also chunked to avoid VAE OOM
+    final_scores_list = []
+    waveforms_cpu = []
+    with torch.no_grad():
+        for i in range(n_particles):
+            wf = prior.decode_and_trim(latents[i : i + 1], duration, sample_rate)
+            final_scores_list.append(reward_model(wf, prompt).item())
+            waveforms_cpu.append(wf.cpu())
+            del wf
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+    final_scores = torch.tensor(final_scores_list)
     best_idx = final_scores.argmax().item()
 
-    return waveforms[best_idx : best_idx + 1], final_scores[best_idx].item(), final_scores
+    return waveforms_cpu[best_idx], final_scores[best_idx].item(), final_scores
 
 
 # ============================================================================
@@ -360,9 +387,9 @@ def inference_rbf(
     return waveform, best_reward, history
 
 
-# ============================================================================
-# 4. Diffusion Posterior Sampling (DPS)
-# ============================================================================
+============================================================================
+4. Diffusion Posterior Sampling (DPS)
+============================================================================
 
 def inference_dps(
     prior,
@@ -759,8 +786,6 @@ def inference_pso(
 SCALING_METHODS = {
     "bon": inference_bon,
     "particle_filter": inference_particle_filtering,
-    "rbf": inference_rbf,
-    "dps": inference_dps,
     "zero_order": inference_zero_order,
     "pso": inference_pso,
 }

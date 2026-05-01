@@ -103,6 +103,8 @@ def build_parser():
                    help="Softmax temperature for particle resampling")
     p.add_argument("--eval_interval", type=int, default=None,
                    help="Evaluate rewards every K steps")
+    p.add_argument("--warmup_steps", type=int, default=None,
+                   help="Particle filter: plain denoising steps before search begins")
     p.add_argument("--guidance_strength", type=float, default=None,
                    help="DPS reward gradient scale")
     p.add_argument("--diffusion_norm", type=float, default=None,
@@ -254,6 +256,7 @@ def run(cfg):
             method_kwargs["n_particles"] = cfg.get("n_particles", 4)
             method_kwargs["temperature"] = cfg.get("temperature", 1.0)
             method_kwargs["eval_interval"] = cfg.get("eval_interval", 5)
+            method_kwargs["warmup_steps"] = cfg.get("warmup_steps", 0)
 
         elif scaling_method == "rbf":
             method_kwargs["init_n_particles"] = cfg.get("init_n_particles", 25)
